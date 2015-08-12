@@ -1,7 +1,10 @@
 package com.typesafe.training.coffeehouse;
 
+import akka.actor.AbstractActor;
+import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import akka.japi.pf.ReceiveBuilder;
 import akka.testkit.JavaTestKit;
 import org.junit.Test;
 
@@ -13,7 +16,7 @@ public class CoffeeHouseTest extends BaseAkkaTestCase {
   @Test
   public void shouldLogMessageWhenCreated() {
     new JavaTestKit(system) {{
-      interceptDebugLogMessage(this, ".*[Oo]pen.*", 1, () -> system.actorOf(CoffeeHouse.props(Integer.MAX_VALUE)));
+      interceptDebugLogMessage(this, ".*[Oo]pen.*", 1, () -> system.actorOf(CoffeeHouse.props(Integer.MAX_VALUE), "coffee-house"));
     }};
   }
 
@@ -104,6 +107,38 @@ public class CoffeeHouseTest extends BaseAkkaTestCase {
       expectTerminated(guest);
     }};
   }
+
+  @Test
+  public void shouldRestartWaiterAndResendPrepareCoffeeToBaristaOnFailure() {
+    new JavaTestKit(system) {{
+      createActor(CoffeeHouse.class, "resend-prepare-coffee", () -> new CoffeeHouse(Integer.MAX_VALUE) {
+        @Override
+        protected ActorRef createBarista() {
+          return getRef();
+        }
+
+        @Override
+        protected ActorRef createWaiter() { //stubbing out the waiter actor to always throw exception
+          return context().actorOf(Props.create(AbstractActor.class, () -> new AbstractActor() {{
+            receive(
+                    ReceiveBuilder.matchAny(o -> {
+                      throw new Waiter.FrustratedException(new Coffee.Akkaccino(), system.deadLetters());
+                    }).build());
+          }}), "waiter");
+        }
+      });
+      ActorRef waiter = expectActor(this, "/user/resend-prepare-coffee/waiter");
+      waiter.tell("Blow up", ActorRef.noSender());
+      expectMsgEquals(new Barista.PrepareCoffee(new Coffee.Akkaccino(), system.deadLetters()));
+    }};
+  }
+
+  @Test
+  public void sendingGetStatusShouldResultInStatusResponse() {
+    new JavaTestKit(system) {{
+      ActorRef coffeeHouse = system.actorOf(CoffeeHouse.props(1), "coffee-house");
+      coffeeHouse.tell(CoffeeHouse.GetStatus.Instance, getRef());
+      expectMsgEquals(new CoffeeHouse.Status(0));
+    }};
+  }
 }
-
-

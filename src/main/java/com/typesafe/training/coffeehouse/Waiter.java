@@ -4,6 +4,7 @@ import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.japi.pf.ReceiveBuilder;
+import scala.Option;
 import scala.PartialFunction;
 import scala.runtime.BoxedUnit;
 
@@ -28,6 +29,15 @@ public class Waiter extends AbstractLoggingActor {
         this.maxComplaints = maxComplaintCount;
     }
 
+//    @Override
+//    public void preRestart(Throwable reason, Option<Object> message) throws Exception {
+//        super.preRestart(reason, message);
+//        if(message.isDefined()) {
+//            barista.tell(new Barista.PrepareCoffee((((Complaint)message.get()).coffee), sender()), self());
+//        }
+//
+//    }
+
     public PartialFunction<Object, BoxedUnit> receive() {
         return ReceiveBuilder
             .match(ServeCoffee.class, sc -> coffeeHouse.tell(new CoffeeHouse.ApproveCoffee(sc.coffee, sender()), self()))
@@ -35,14 +45,15 @@ public class Waiter extends AbstractLoggingActor {
 //            .match(Complaint.class, a -> complaintCount > maxComplaints, b -> throw new FrustratedException())
 //            .match(Complaint.class, c -> barista.tell(new Barista.PrepareCoffee(c.coffee, sender()), self()))
             .match(Complaint.class, c -> {
-                    if (complaintCount < maxComplaints) {
-                        barista.tell(new Barista.PrepareCoffee(c.coffee, sender()), self());
-                        ++complaintCount;
-                    } else {
-                        log().info("Too many complaints, unable to make coffee {}", c.coffee);
-                        throw new FrustratedException();
-                    }
-                })
+                if (complaintCount < maxComplaints) {
+                    barista.tell(new Barista.PrepareCoffee(c.coffee, sender()), self());
+                    ++complaintCount;
+                } else {
+                    log().info("Too many complaints, unable to make coffee {}", c.coffee);
+                    log().info("George is getting frustrated!");
+                    throw new FrustratedException(c.coffee, sender());
+                }
+            })
             .build();
     }
 
@@ -121,6 +132,34 @@ public class Waiter extends AbstractLoggingActor {
         }
     }
 
-    public static class FrustratedException extends IllegalStateException {}
+    public static class FrustratedException extends IllegalStateException {
+        public Coffee coffee;
+        public ActorRef guest;
+
+        public FrustratedException(Coffee coffee, ActorRef guest) {
+            this.coffee = coffee;
+            this.guest = guest;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            FrustratedException that = (FrustratedException) o;
+
+            if (!coffee.equals(that.coffee)) return false;
+            return guest.equals(that.guest);
+
+        }
+
+        @Override
+        public int hashCode() {
+            int result = coffee.hashCode();
+            result = 31 * result + guest.hashCode();
+            return result;
+        }
+
+    }
 
 }

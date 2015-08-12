@@ -1,10 +1,13 @@
 package com.typesafe.training.coffeehouse;
 
 import akka.actor.*;
+import akka.dispatch.Futures;
 import akka.japi.pf.DeciderBuilder;
 import akka.japi.pf.ReceiveBuilder;
+import akka.routing.FromConfig;
 import com.typesafe.config.Config;
 import scala.PartialFunction;
+import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
 import scala.concurrent.duration.FiniteDuration;
 import scala.runtime.BoxedUnit;
@@ -61,10 +64,16 @@ public class CoffeeHouse extends AbstractLoggingActor {
     @Override
     public SupervisorStrategy supervisorStrategy() {
         return new OneForOneStrategy(true, DeciderBuilder
-                .match(Guest.CaffeineException.class, e -> SupervisorStrategy.stop())
+                .match(Guest.CaffeineException.class, ce -> SupervisorStrategy.stop())
+                .match(Waiter.FrustratedException.class, fe -> handleFrustratedException(fe) )
                 .match(Throwable.class, t -> SupervisorStrategy.defaultDecider().apply(t))
                 .build()
         );
+    }
+
+    private SupervisorStrategy.Directive handleFrustratedException(Waiter.FrustratedException fe) {
+        barista.tell(new Barista.PrepareCoffee(fe.coffee, fe.guest), sender());
+        return SupervisorStrategy.restart();
     }
 
 
@@ -80,6 +89,10 @@ public class CoffeeHouse extends AbstractLoggingActor {
                     //log().info("Thanks, {}, for being our guest!", t.getActor());
                     guestBook.remove(t.getActor());
                     log().info("Removed guest {} from the guest book", t.getActor());
+                })
+                .match(GetStatus.class, getStatus -> {
+                    Future<Object> future = Futures.future( () -> new Status(guestBook.size()), context().dispatcher());
+                    akka.pattern.Patterns.pipe(future, context().dispatcher()).to(sender());
                 })
                 .build();
     }
@@ -121,10 +134,12 @@ public class CoffeeHouse extends AbstractLoggingActor {
 //    }
 
     protected ActorRef createBarista() {
-        return getContext().actorOf(Barista.props(prepareCoffeeDuration, accuracy), "barista");
+        return getContext().actorOf(FromConfig.getInstance().props(
+                Barista.props(prepareCoffeeDuration, accuracy))
+                .withDispatcher("coffee-house.barista-dispatcher"), "barista");
     }
 
-    public ActorRef createWaiter() {
+    protected ActorRef createWaiter() {
         return getContext().actorOf(Waiter.props(self(), barista, maxComplaintCount), "waiter");
     }
 
@@ -193,6 +208,36 @@ public class CoffeeHouse extends AbstractLoggingActor {
             result = 31 * result + guest.hashCode();
             return result;
         }
+    }
+
+    public static class GetStatus implements Serializable {
+        public static final GetStatus Instance = new GetStatus();
+        public GetStatus() {}
+    }
+
+    public static class Status implements Serializable {
+        public int guestCount;
+
+        public Status(int guestCount) {
+            this.guestCount = guestCount;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Status status = (Status) o;
+
+            return guestCount == status.guestCount;
+
+        }
+
+        @Override
+        public int hashCode() {
+            return guestCount;
+        }
+
     }
 
 }

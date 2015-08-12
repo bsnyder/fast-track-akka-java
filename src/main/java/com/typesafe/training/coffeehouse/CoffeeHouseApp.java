@@ -3,16 +3,16 @@
  */
 package com.typesafe.training.coffeehouse;
 
-import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
-import akka.actor.Props;
+import akka.dispatch.OnComplete;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-import akka.japi.pf.ReceiveBuilder;
-import com.typesafe.config.Config;
-import scala.concurrent.duration.Duration;
-import scala.concurrent.duration.FiniteDuration;
+import akka.pattern.Patterns;
+import akka.util.Timeout;
+import scala.concurrent.Future;
+import scala.reflect.ClassTag;
+import scala.reflect.ClassTag$;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -35,14 +35,17 @@ public class CoffeeHouseApp implements Terminal{
 
     private final int caffeineLimit;
 
+    private Timeout statusTimeout;
+
     @SuppressWarnings("unused")
     private final ActorRef coffeeHouse;
 
-    public CoffeeHouseApp(final ActorSystem system){
+    public CoffeeHouseApp(final ActorSystem system, Timeout statusTimeout){
         this.system = system;
         caffeineLimit = system.settings().config().getInt("coffee-house.caffeine-limit");
         log = Logging.getLogger(system, getClass().getName());
         coffeeHouse = createCoffeeHouse();
+        this.statusTimeout = statusTimeout;
 
         // Prepare an anonymous actor
 //        Props props = Props.create(AbstractLoggingActor.class, () -> new AbstractLoggingActor() {
@@ -66,7 +69,11 @@ public class CoffeeHouseApp implements Terminal{
         final String name = opts.getOrDefault("name", "coffee-house");
 
         final ActorSystem system = ActorSystem.create(String.format("%s-system", name));
-        final CoffeeHouseApp coffeeHouseApp = new CoffeeHouseApp(system);
+
+        Timeout statusTimeout = new Timeout(
+                system.settings().config().getDuration("coffee-house.status-timeout", TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS);
+
+        final CoffeeHouseApp coffeeHouseApp = new CoffeeHouseApp(system, statusTimeout);
         coffeeHouseApp.run();
     }
 
@@ -126,5 +133,13 @@ public class CoffeeHouseApp implements Terminal{
     }
 
     protected void getStatus(){
+        ClassTag<CoffeeHouse.Status> tag = ClassTag$.MODULE$.apply(CoffeeHouse.Status.class);
+        Future<Object> future = Patterns.ask(coffeeHouse, CoffeeHouse.GetStatus.Instance, statusTimeout);
+        future.mapTo(tag).onComplete(new OnComplete<CoffeeHouse.Status>(){
+            @Override
+            public void onComplete(Throwable failure, CoffeeHouse.Status success) throws Throwable {
+                log.info("Guest count: {}", success.guestCount);
+            }
+        }, system.dispatcher());
     }
 }

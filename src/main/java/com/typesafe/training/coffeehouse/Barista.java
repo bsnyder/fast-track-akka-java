@@ -1,22 +1,21 @@
 package com.typesafe.training.coffeehouse;
 
-import akka.actor.AbstractLoggingActor;
+import akka.actor.AbstractActorWithStash;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.japi.pf.ReceiveBuilder;
 import scala.PartialFunction;
-import scala.concurrent.duration.Duration;
 import scala.concurrent.duration.FiniteDuration;
 import scala.runtime.BoxedUnit;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Created by i839879 on 8/11/15.
  */
-public class Barista extends AbstractLoggingActor {
+public class Barista extends AbstractActorWithStash /*AbstractLoggingActor*/ {
 
     private FiniteDuration prepareCoffeeDuration;
 
@@ -28,20 +27,67 @@ public class Barista extends AbstractLoggingActor {
     }
 
     public PartialFunction<Object, BoxedUnit> receive() {
+        return ready();
+//        return ReceiveBuilder
+//                .match(PrepareCoffee.class, pc -> prepareCoffee(pc))
+//                .build();
+    }
+
+//    private void prepareCoffee(PrepareCoffee pc) {
+//        if (new Random().nextInt(99) < accuracy) {
+//            // Prepare the correct coffee
+////            Thread.sleep(this.prepareCoffeeDuration.toMillis());
+////            busy(this.prepareCoffeeDuration);
+//            context().become(busy(sender()));
+//            sender().tell(new CoffeePrepared(pc.coffee, pc.guest), self());
+//        } else {
+//            // Prepare a random coffee
+////            Thread.sleep(this.prepareCoffeeDuration.toMillis());
+////            busy(this.prepareCoffeeDuration);
+//            sender().tell(new CoffeePrepared(Coffee.orderOther(pc.coffee), pc.guest), self());
+//        }
+//    }
+
+//    private PartialFunction<Object, BoxedUnit> busy(ActorRef sender) {
+//        return ReceiveBuilder.match(CoffeePrepared.class, cp -> {
+//            sender.tell(cp, self());
+//            unstashAll();
+//            context().become(ready());
+//        })
+//                .matchAny(msg -> stash())
+//                .build();
+//    }
+
+    private PartialFunction<Object,BoxedUnit> ready() {
         return ReceiveBuilder
                 .match(PrepareCoffee.class, pc -> {
-                    if (new Random().nextInt(99) < accuracy) {
-                        // Prepare the correct coffee
-                        Thread.sleep(this.prepareCoffeeDuration.toMillis());
-                        sender().tell(new Barista.CoffeePrepared(pc.coffee, pc.guest), self());
-                    } else {
-                        // Prepare a random coffee
-                        Thread.sleep(this.prepareCoffeeDuration.toMillis());
-                        sender().tell(new Barista.CoffeePrepared(Coffee.orderOther(pc.coffee), pc.guest), self());
-                    }
+                    context().system().scheduler()
+                            .scheduleOnce(prepareCoffeeDuration, self(),
+                                    new CoffeePrepared(makeCoffee(pc.coffee), pc.guest),
+                                        context().dispatcher(), sender()
+                            );
+                    context().become(busy());
                 })
                 .build();
+    }
 
+    private PartialFunction<Object, BoxedUnit> busy() {
+        return ReceiveBuilder
+                .match(CoffeePrepared.class, cp -> {
+                    sender().tell(cp, self());
+                    unstashAll();
+                    context().become(ready());
+                })
+                .matchAny(o -> stash())
+                .build();
+    }
+
+    private Coffee makeCoffee(Coffee coffee) {
+        if (new Random().nextInt(99) < accuracy) {
+            return coffee;
+        } else {
+           return Coffee.orderOther(coffee);
+        }
     }
 
     public static Props props(FiniteDuration prepareCoffeeDuration, int accuracy) {
@@ -106,6 +152,24 @@ public class Barista extends AbstractLoggingActor {
         }
 
 
+    }
+
+    private void busy(FiniteDuration duration) {
+        pi(duration.toMillis() * 800);
+    }
+
+    private BigDecimal pi(long m) {
+        int n = 0;
+        BigDecimal acc = new BigDecimal(0.0);
+        while(n < m) {
+            acc = acc.add(gregoryLeibnitz(n));
+            n += 1;
+        }
+        return acc;
+    }
+
+    private BigDecimal gregoryLeibnitz(int n) {
+        return new BigDecimal(4.0 * (1 - (n % 2) * 2) / (n * 2 + 1));
     }
 
 }
