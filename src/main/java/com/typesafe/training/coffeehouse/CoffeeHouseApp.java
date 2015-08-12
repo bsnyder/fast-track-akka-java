@@ -3,10 +3,16 @@
  */
 package com.typesafe.training.coffeehouse;
 
+import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
+import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
+import akka.japi.pf.ReceiveBuilder;
+import com.typesafe.config.Config;
+import scala.concurrent.duration.Duration;
+import scala.concurrent.duration.FiniteDuration;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -15,6 +21,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -26,13 +33,31 @@ public class CoffeeHouseApp implements Terminal{
 
     private final LoggingAdapter log;
 
+    private final int caffeineLimit;
+
     @SuppressWarnings("unused")
     private final ActorRef coffeeHouse;
 
     public CoffeeHouseApp(final ActorSystem system){
         this.system = system;
+        caffeineLimit = system.settings().config().getInt("coffee-house.caffeine-limit");
         log = Logging.getLogger(system, getClass().getName());
         coffeeHouse = createCoffeeHouse();
+
+        // Prepare an anonymous actor
+//        Props props = Props.create(AbstractLoggingActor.class, () -> new AbstractLoggingActor() {
+//            {
+//                coffeeHouse.tell("Brew coffee", self());
+//                receive(ReceiveBuilder.matchAny(o -> {
+//                    log().info(o.toString());
+//                    system.stop(self());
+//                }).build());
+//            }
+//        });
+
+        // Actually create the anonymous actor
+//        system.actorOf(props);
+
     }
 
     public static void main(final String[] args) throws IOException{
@@ -70,7 +95,9 @@ public class CoffeeHouseApp implements Terminal{
     }
 
     protected ActorRef createCoffeeHouse(){
-        return system.deadLetters();
+//        return system.deadLetters();
+
+        return system.actorOf(CoffeeHouse.props(caffeineLimit), "coffee-house");
     }
 
     private void commandLoop() throws IOException{
@@ -93,6 +120,9 @@ public class CoffeeHouseApp implements Terminal{
     }
 
     protected void createGuest(int count, Coffee coffee, int maxCoffeeCount){
+        for (int i = 0; i < count; ++i) {
+            coffeeHouse.tell(new CoffeeHouse.CreateGuest(coffee, maxCoffeeCount), ActorRef.noSender());
+        }
     }
 
     protected void getStatus(){

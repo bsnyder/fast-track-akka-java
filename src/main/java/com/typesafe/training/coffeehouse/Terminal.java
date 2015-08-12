@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 
 public interface Terminal{
 
-    Pattern createGuestPattern = Pattern.compile("(\\d+)?\\s*(?:guest|g)\\s*(A|a|M|m|P|p)?\\s*(\\d+)?");
+    Pattern createGuestPattern = Pattern.compile("(\\d+)?\\s*(?:guest|g)\\s*(A|a|M|m|C|c)?\\s*(\\d+)?");
     Pattern getStatusPattern = Pattern.compile("status|s");
     Pattern quitPattern = Pattern.compile("quit|q");
 

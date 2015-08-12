@@ -1,40 +1,35 @@
-initial-state
+faulty-waiter
 
-# Exercise 0 > Initial State
+# Exercise 13 > Faulty Waiter
 
-Before we begin coding, we want to verify that the initial state is working as expected. From your `sbt` session: 
+In this exercise, we will introduce another faulty actor in the form of our `Barista` where sometimes they make the wrong coffee. When this happens, the `Guest` will complain and reorder. If the `Waiter` receives too many complaints, he will become frustrated.
 
-- Use the `run` command to check the main class `CoffeeHouseApp` boots up as expected. You should see the following:
-
-```scala
-man [e] > coffee-house > initial-state > run
-[info] Running com.typesafe.training.coffeehouse.CoffeeHouseApp
-[WARN] [05/27/2015 12:56:08.967] [run-main-0] [...coffeehouse.CoffeeHouseApp(akka://coffee-house-system)] CoffeeHouseApp running
-Enter commands into the terminal, e.g. q or quit
-```
-
-- Use the `test` command to verify the initial state works as expected. You should see something like the following:
-
-```scala
-...
-[info] Test run started
-[info] Test com.typesafe.training.coffeehouse.CoffeeTest.otherDrinkShouldReturnDrinkDifferentFromGivenCode started
-[info] Test com.typesafe.training.coffeehouse.CoffeeTest.orderShouldCreateCorrectBeverageForGivenCode started
-[info] Test com.typesafe.training.coffeehouse.CoffeeTest.orderShouldThrowExceptionForWrongBeverageCode started
-[info] Test com.typesafe.training.coffeehouse.CoffeeTest.coffeesShouldContains_AkkaccinoCaffeJavaAndMochaPlay started
-[info] Test run finished: 0 failed, 0 ignored, 4 total, 0.146s
-[info] Test run started
-[info] Test com.typesafe.training.coffeehouse.TerminalTest.shouldCreateUnknownFromCommand started
-[info] Test com.typesafe.training.coffeehouse.TerminalTest.shouldCreateCorrectGuestFromCommand started
-[info] Test com.typesafe.training.coffeehouse.TerminalTest.shouldCreateGetStatusFromCommand started
-[info] Test com.typesafe.training.coffeehouse.TerminalTest.shouldCreateQuitFromCommand started
-[info] Test run finished: 0 failed, 0 ignored, 4 total, 0.005s
-[info] Test run started
-[info] Test com.typesafe.training.coffeehouse.CoffeeHouseAppTest.argsToOptsShouldConvertArgsToOpts started
-[info] Test com.typesafe.training.coffeehouse.CoffeeHouseAppTest.applySystemPropertiesShouldConvertOptsToSystemProps started
-[info] Test run finished: 0 failed, 0 ignored, 2 total, 0.013s
-[info] Passed: Total 10, Failed 0, Errors 0, Passed 10
-[success] Total time: 1 s, ...
-```
-
+- Change the `Barista` as follows:
+    - Add an `accuracy` parameter of type `Int` expressing a percentage.
+    - Get a random `Int` value less than 100.
+    - If the random `Int` is less than `accuracy`:
+        - Prepare the correct `Coffee`.
+        - Otherwise prepare a wrong one.
+        - *HINT*: See `Coffee.orderOther` method.
+- Change the `Waiter` as follows:
+    - Add a `Complaint` message with parameter `coffee` of type `Coffee`.
+    - Add a `FrustratedException` type extending `IllegalStateException`.
+    - Add a `barista` parameter of type `ActorRef` and a `maxComplaintCount` parameter of type `Int`.
+    - Keep track of the number of `Complaint` messages received.
+    - If more `Complaint` messages arrive than the `maxComplaintCount`:
+        - Throw a `FrustratedException`
+        - Else send `PrepareCoffee` to the `Barista`.
+- Change the `Guest` as follows:
+    - On receiving the wrong `Coffee`, send a `Complaint` to the `Waiter`.
+    - Log at `info` when receiving the wrong `Coffee` (ie. `Expected a {}, but got a {}!`)
+    - Which argument needs to be given for `coffee`?
+- Change `CoffeeHouse` as follows:
+    - For `accuracy` use a configuration value with key `coffee-house.barista.accuracy`.
+    - For `maxComplaintCount` use a configuration value with key `coffee-house.waiter.max-complaint-count`.
+    - Don't forget to use the new parameters when creating the `Barista` and `Waiter`.
+- Use the `run` command to boot the `CoffeeHouseApp` and verify:
+    - Create a `Guest` and see what happens when the `Waiter` gets frustrated.
+    - Attention:
+        - You might need to use small `accuracy` and `maxComplainCount` values.
+- Use the `test` command to verify the solution works as expected.
 - Use the `koan next` command to move to the next exercise.
